@@ -1,67 +1,112 @@
 import json
+import threading
+import time
+from textwrap import shorten
+
 import markdown
 from markdownify import markdownify as md
 from openai import OpenAI
 from ratelimit import limits, sleep_and_retry
-import threading
 
 from common.config import Config
-from common.logger import logger
+from common.logger import get_logger
 from core.entry_filter import filter_entry
 
 config = Config()
 llm_client = OpenAI(base_url=config.llm_base_url, api_key=config.llm_api_key)
 file_lock = threading.Lock()
+logger = get_logger(__name__)
+
+
+def _preview(text: str, width: int = 120) -> str:
+    cleaned = text.replace('\n', ' ').replace('\r', ' ').strip()
+    return shorten(cleaned, width=width, placeholder='…')
+
 
 @sleep_and_retry
 @limits(calls=config.llm_RPM, period=60)
 def process_entry(miniflux_client, entry):
-    #Todo change to queue
+    # Todo change to queue
     llm_result = ''
+    entry_id = entry.get('id')
+    feed = entry.get('feed', {})
+    feed_title = feed.get('title')
 
-    for agent in config.agents.items():
-        # filter, if AI is not generating, and in allow_list, or not in deny_list
-        if filter_entry(config, agent, entry):
-            if '${content}' in agent[1]['prompt']:
-                messages = [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": agent[1]['prompt'].replace('${content}', md(entry['content']))}
-                ]
-            else:
-                messages = [
-                    {"role": "system", "content": agent[1]['prompt']},
-                    {"role": "user", "content": "The following is the input content:\n---\n " + md(entry['content'])}
-                ]
+    logger.info(
+        'Processing entry | id=%s | feed="%s" | title="%s"',
+        entry_id,
+        feed_title,
+        entry.get('title'),
+    )
 
+    for agent_name, agent_config in config.agents.items():
+        agent_prompt = agent_config.get('prompt', '')
+        if not filter_entry(config, (agent_name, agent_config), entry):
+            logger.debug('Agent %s skipped by filters for entry %s', agent_name, entry_id)
+            continue
+
+        agent_start = time.time()
+        if '${content}' in agent_prompt:
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": agent_prompt.replace('${content}', md(entry.get('content', '')))}
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": agent_prompt},
+                {"role": "user", "content": "The following is the input content:\n---\n " + md(entry.get('content', ''))}
+            ]
+
+        try:
             completion = llm_client.chat.completions.create(
                 model=config.llm_model,
-                messages= messages,
+                messages=messages,
                 timeout=config.llm_timeout
             )
+        except Exception as exc:
+            logger.error('Agent %s failed to fetch LLM result for entry %s', agent_name, entry_id, exc_info=exc)
+            raise
 
-            response_content = completion.choices[0].message.content
-            logger.info(f"agents:{agent[0]} feed_title:{entry['title']} result:{response_content}")
+        response_content = completion.choices[0].message.content or ''
+        duration = time.time() - agent_start
+        logger.info(
+            'Agent %s completed entry %s in %.2fs | preview="%s"',
+            agent_name,
+            entry_id,
+            duration,
+            _preview(response_content),
+        )
 
-            # save for ai_summary
-            if agent[0] == 'summary':
-                entry_list = {'datetime': entry['created_at'], 'category': entry['feed']['category']['title'], 'title': entry['title'], 'content': response_content}
-                with file_lock:
-                    try:
-                        with open('entries.json', 'r') as file:
-                            data = json.load(file)
-                    except (FileNotFoundError, json.JSONDecodeError):
-                        data = []
-                    data.append(entry_list)
-                    with open('entries.json', 'w') as file:
-                        json.dump(data, file, indent=4, ensure_ascii=False)
+        if agent_name == 'summary':
+            entry_list = {
+                'datetime': entry.get('created_at'),
+                'category': feed.get('category', {}).get('title') if feed else None,
+                'title': entry.get('title'),
+                'content': response_content
+            }
+            with file_lock:
+                try:
+                    with open('entries.json', 'r') as file:
+                        data = json.load(file)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    data = []
+                data.append(entry_list)
+                with open('entries.json', 'w') as file:
+                    json.dump(data, file, indent=4, ensure_ascii=False)
+            logger.debug('Persisted summary snapshot for entry %s', entry_id)
 
-            if agent[1]['style_block']:
-                llm_result = (llm_result + '<pre style="white-space: pre-wrap;"><code>\n'
-                              + agent[1]['title']
-                              + response_content.replace('\n', '').replace('\r', '')
-                              + '\n</code></pre><hr><br />')
-            else:
-                llm_result = llm_result + f"{agent[1]['title']}{markdown.markdown(response_content)}<hr><br />"
+        if agent_config.get('style_block'):
+            llm_result = (
+                llm_result + '<pre style="white-space: pre-wrap;"><code>\n'
+                + agent_config.get('title', '')
+                + response_content.replace('\n', '').replace('\r', '')
+                + '\n</code></pre><hr><br />'
+            )
+        else:
+            llm_result = llm_result + f"{agent_config.get('title', '')}{markdown.markdown(response_content)}<hr><br />"
 
-    if len(llm_result) > 0:
-        dict_result = miniflux_client.update_entry(entry['id'], content= llm_result + entry['content'])
+    if llm_result:
+        miniflux_client.update_entry(entry_id, content=llm_result + entry.get('content', ''))
+        logger.info('Updated Miniflux entry %s with agent output', entry_id)
+    else:
+        logger.debug('No agent produced output for entry %s', entry_id)

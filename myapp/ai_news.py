@@ -1,17 +1,18 @@
 import json
 from datetime import datetime
 import time
-import markdown
 
+import markdown
 from openai import OpenAI
 from feedgen.feed import FeedGenerator
 
-from common import logger
 from common.config import Config
+from common.logger import get_logger
 from myapp import app
 
 config = Config()
 llm_client = OpenAI(base_url=config.llm_base_url, api_key=config.llm_api_key)
+logger = get_logger(__name__)
 
 @app.route('/rss/ai-news', methods=['GET'])
 def miniflux_ai_news():
@@ -27,13 +28,16 @@ def miniflux_ai_news():
               status: string
     """
     # Todo 根据需要获取最近时间内的文章，或总结后的列表
+    logger.info('Serving AI news RSS request')
     try:
         with open('ai_news.json', 'r') as file:
             ai_news = json.load(file)
     except FileNotFoundError:
         ai_news = ''
-    except Exception as e:
-        logger.error(e)
+        logger.warning('ai_news.json not found; returning welcome placeholder')
+    except Exception as exc:
+        logger.error('Failed to read ai_news.json', exc_info=exc)
+        ai_news = ''
 
     # 清空 ai_news.json
     with open('ai_news.json', 'w') as file:
@@ -59,6 +63,9 @@ def miniflux_ai_news():
         fe.link(href='https://ai-news.miniflux' + time.strftime('%Y-%m-%d-%H-%M'))
         fe.title(f"{'Morning' if datetime.today().hour < 12 else 'Nightly'} Newsᴬᴵ for you - {time.strftime('%Y-%m-%d')}")
         fe.description(markdown.markdown(ai_news))
+        logger.info('Published AI news entry | timestamp=%s', time.strftime('%Y-%m-%d-%H-%M'))
+    else:
+        logger.debug('No AI news content available; responding with welcome feed only')
 
     result = fg.rss_str(pretty=True)
     return result

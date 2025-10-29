@@ -1,21 +1,30 @@
 import json
 import time
-from openai import OpenAI
+from textwrap import shorten
 
-from common import logger
 from common.config import Config
+from common.logger import get_logger
 from core.get_ai_result import get_ai_result
 
 config = Config()
-llm_client = OpenAI(base_url=config.llm_base_url, api_key=config.llm_api_key)
+logger = get_logger(__name__)
+
+
+def _preview(text: str) -> str:
+    return shorten(text.replace('\n', ' ').strip(), width=160, placeholder='…')
 
 def generate_daily_news(miniflux_client):
-    logger.info('Generating daily news')
+    logger.info('Generating daily news digest')
     # fetch entries.json
     try:
         with open('entries.json', 'r') as f:
             entries = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
+        logger.warning('entries.json missing or empty; skipping AI news generation')
+        return []
+
+    if not entries:
+        logger.info('No cached summaries available for AI news generation')
         return []
 
     contents = '\n'.join([i['content'] for i in entries])
@@ -28,7 +37,7 @@ def generate_daily_news(miniflux_client):
 
     response_content = greeting + '\n\n### 🌐Summary\n' + summary + '\n\n### 📝News\n' + summary_block
 
-    logger.info('Generated daily news: ' + response_content)
+    logger.info('Daily news compiled | items=%s | preview="%s"', len(entries), _preview(response_content))
 
     # empty entries.json
     with open('entries.json', 'w') as f:
@@ -43,4 +52,4 @@ def generate_daily_news(miniflux_client):
 
     if ai_news_feed_id:
         miniflux_client.refresh_feed(ai_news_feed_id)
-        logger.debug('Successfully refreshed the ai_news feed in Miniflux!')
+        logger.debug('Refreshed the ai_news feed in Miniflux | feed_id=%s', ai_news_feed_id)
