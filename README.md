@@ -1,4 +1,5 @@
 # miniflux-ai
+
 Miniflux with AI
 
 This project integrates with Miniflux to fetch RSS feed content via API or webhook. It then utilizes large language models (e.g., Ollama, ChatGPT, LLaMA, Gemini) to generate summaries, translations, and AI-driven news insights.
@@ -50,15 +51,14 @@ This project integrates with Miniflux to fetch RSS feed content via API or webho
 The repository includes a template configuration file: `config.sample.yml`. Modify the `config.yml` to set up:
 
 > If using a webhook, enter the URL in Settings > Integrations > Webhook > Webhook URL.
-> 
+>
 > If deploying in a container alongside Miniflux, use the following URL:
 > http://miniflux_ai/api/miniflux-ai.
 
 - **Miniflux**: Base URL and API key.
 - **LLM**: Model settings, API key, and endpoint.Add timeout, max_workers parameters due to multithreading
 - **AI News**: Schedule and prompts for daily news generation
-- **Agents**: Define each agent's prompt, allow_list/deny_list filters, and output style（`style_block` parameter controls whether the output is formatted as a code block in Markdown）.
-
+- **Agents**: Define each agent's prompt, allow_list/deny_list filters, and output style（`style_block` parameter controls whether the output is formatted as a code block in Markdown）。You can also enable behaviors such as auto-translating non-Chinese content via `auto_translate_non_chinese`.
 
 ## Docker Setup
 
@@ -68,17 +68,17 @@ The project includes a `docker-compose.yml` file for easy deployment:
 
 ```yaml
 services:
-    miniflux_ai:
-        container_name: miniflux_ai
-        image: ghcr.io/qetesh/miniflux-ai:latest
-        restart: always
-        environment:
-            TZ: Asia/Shanghai
-        volumes:
-            - ./config.yml:/app/config.yml
-            # - ./entries.json:/app/entries.json # Provide persistent for AI news
-
+  miniflux_ai:
+    container_name: miniflux_ai
+    image: ghcr.io/qetesh/miniflux-ai:latest
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./config.yml:/app/config.yml
+      # - ./entries.json:/app/entries.json # Provide persistent for AI news
 ```
+
 Refer to `config.sample.*.yml`, create `config.yml`
 To start the services:
 
@@ -93,11 +93,13 @@ docker-compose up -d
 3. The script will fetch unread RSS entries, process them with the LLM, and update the content in Miniflux.
 
 ## Roadmap
+
 - [x] Add daily summary(by title, Summary of existing AI)
   - [x] Add Morning and Evening News（e.g. 9/24: AI Morning News, 9/24: AI Evening News）
   - [x] Add timed summary
 
 ## FAQ
+
 <details>
 <summary>If the formatting of summary content is incorrect, add the following code in Settings > Custom CSS:</summary>
 ```
@@ -115,7 +117,6 @@ Feel free to fork this repository and submit pull requests. Contributions and is
 <a href="https://github.com/Qetesh/miniflux-ai/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Qetesh/miniflux-ai" />
 </a>
-
 
 ## Star History
 
