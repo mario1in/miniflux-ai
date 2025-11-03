@@ -2,6 +2,7 @@ import json
 import threading
 import time
 from textwrap import shorten
+import html
 
 import markdown
 from markdownify import markdownify as md
@@ -54,7 +55,7 @@ def process_entry(miniflux_client, entry):
         else:
             messages = [
                 {"role": "system", "content": agent_prompt},
-                {"role": "user", "content": "The following is the input content:\n---\n " + md(entry.get('content', ''))}
+                {"role": "user", "content": "\n---\n " + md(entry.get('content', ''))}
             ]
 
         try:
@@ -96,12 +97,17 @@ def process_entry(miniflux_client, entry):
             logger.debug('Persisted summary snapshot for entry %s', entry_id)
 
         if agent_config.get('style_block'):
-            llm_result = (
-                llm_result + '<pre style="white-space: pre-wrap;"><code>\n'
-                + agent_config.get('title', '')
-                + response_content.replace('\n', '').replace('\r', '')
-                + '\n</code></pre><hr><br />'
+            formatted_block = (
+                '<div style="border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; '
+                'margin: 16px 0; background-color: #f9fafb; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);">'
+                f'<div style="font-size: 1.05em; font-weight: 600; color: #374151; margin-bottom: 8px;">{agent_config.get("title", "")}</div>'
+                '<pre style="white-space: pre-wrap; font-family: \"SFMono-Regular\", Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; '
+                'font-size: 0.96em; line-height: 1.6; color: #1f2937; margin: 0;">\n'
+                f'{html.escape(response_content.strip())}\n'
+                '</pre>'
+                '</div><hr><br />'
             )
+            llm_result = llm_result + formatted_block
         else:
             llm_result = llm_result + f"{agent_config.get('title', '')}{markdown.markdown(response_content)}<hr><br />"
 
