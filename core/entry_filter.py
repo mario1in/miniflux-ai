@@ -35,8 +35,10 @@ def filter_entry(config, agent, entry):
         # filter, if in allow_list
         if allow_list is not None:
             if any(fnmatch.fnmatch(entry['feed']['site_url'], pattern) for pattern in allow_list):
+                if auto_translate_non_chinese:
+                    return not has_cjk
                 return True
-            return auto_translate_non_chinese and not has_cjk
+            return False
 
         # filter, if not in deny_list
         elif deny_list is not None:

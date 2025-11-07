@@ -96,6 +96,57 @@ class FilterEntryTest(unittest.TestCase):
 
         self.assertFalse(filter_entry(config, agent, entry))
 
+    def test_auto_translate_respects_allow_list_for_non_match(self):
+        agent_config = {
+            'title': '🌐AI translate: ',
+            'style_block': False,
+            'auto_translate_non_chinese': True,
+            'allow_list': ['https://twitterapi.zeabur.app/*']
+        }
+        config = DummyConfig(agents={'translate': agent_config})
+        agent = ('translate', agent_config)
+        entry = {
+            'title': 'Other feed',
+            'content': '<p>Hello world</p>',
+            'feed': {'site_url': 'https://example.com/post'}
+        }
+
+        self.assertFalse(filter_entry(config, agent, entry))
+
+    def test_auto_translate_allow_list_skips_chinese_content(self):
+        agent_config = {
+            'title': '🌐AI translate: ',
+            'style_block': False,
+            'auto_translate_non_chinese': True,
+            'allow_list': ['https://twitterapi.zeabur.app/*']
+        }
+        config = DummyConfig(agents={'translate': agent_config})
+        agent = ('translate', agent_config)
+        entry = {
+            'title': '国内新闻',
+            'content': '<p>这是一个测试</p>',
+            'feed': {'site_url': 'https://twitterapi.zeabur.app/feed'}
+        }
+
+        self.assertFalse(filter_entry(config, agent, entry))
+
+    def test_auto_translate_allow_list_allows_non_chinese_match(self):
+        agent_config = {
+            'title': '🌐AI translate: ',
+            'style_block': False,
+            'auto_translate_non_chinese': True,
+            'allow_list': ['https://twitterapi.zeabur.app/*']
+        }
+        config = DummyConfig(agents={'translate': agent_config})
+        agent = ('translate', agent_config)
+        entry = {
+            'title': 'Hello',
+            'content': '<p>Hello world</p>',
+            'feed': {'site_url': 'https://twitterapi.zeabur.app/feed'}
+        }
+
+        self.assertTrue(filter_entry(config, agent, entry))
+
 
 if __name__ == '__main__':
     unittest.main()
