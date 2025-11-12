@@ -1,11 +1,7 @@
 import fnmatch
 import re
 
-from common.logger import get_logger
-
 _CJK_PATTERN = re.compile(r'[\u4e00-\u9fff]')
-logger = get_logger(__name__)
-
 
 def _extract_plain_text(entry):
     content = entry.get('content') or ''
@@ -32,86 +28,36 @@ def filter_entry(config, agent, entry):
     site_url = (entry.get('feed') or {}).get('site_url', '')
     entry_id = entry.get('id')
 
-    logger.info(
-        "开始过滤条目 id=%s site_url=%s auto_translate=%s allow_list=%s deny_list=%s",
-        entry_id,
-        site_url,
-        auto_translate_non_chinese,
-        bool(allow_list),
-        bool(deny_list),
-    )
-
     # filter, if not content starts with start flag
     if not entry['content'].startswith(tuple(start_with_list)):
         plain_text = _extract_plain_text(entry)
         has_cjk = _contains_cjk(plain_text)
 
-        logger.info(
-            "条目 id=%s 检测到 CJK=%s，内容长度=%s",
-            entry_id,
-            has_cjk,
-            len(plain_text),
-        )
-
         # filter, if in allow_list
         if allow_list is not None:
             matched_pattern = next((pattern for pattern in allow_list if fnmatch.fnmatch(site_url, pattern)), None)
-            logger.info(
-                "条目 id=%s allow_list 匹配结果 pattern=%s",
-                entry_id,
-                matched_pattern,
-            )
             if matched_pattern:
                 if auto_translate_non_chinese:
                     decision = not has_cjk
-                    logger.info(
-                        "条目 id=%s 启用自动翻译，has_cjk=%s -> 返回 %s",
-                        entry_id,
-                        has_cjk,
-                        decision,
-                    )
                     return decision
-                logger.info("条目 id=%s 通过 allow_list", entry_id)
                 return True
-            logger.info("条目 id=%s 未命中 allow_list，过滤", entry_id)
             return False
 
         # filter, if not in deny_list
         elif deny_list is not None:
             matched_pattern = next((pattern for pattern in deny_list if fnmatch.fnmatch(site_url, pattern)), None)
-            logger.info(
-                "条目 id=%s deny_list 匹配结果 pattern=%s",
-                entry_id,
-                matched_pattern,
-            )
             if matched_pattern:
-                logger.info("条目 id=%s 命中 deny_list，过滤", entry_id)
                 return False
             if auto_translate_non_chinese:
                 decision = not has_cjk
-                logger.info(
-                    "条目 id=%s 启用自动翻译，has_cjk=%s -> 返回 %s",
-                    entry_id,
-                    has_cjk,
-                    decision,
-                )
                 return decision
-            logger.info("条目 id=%s 未命中 deny_list，放行", entry_id)
             return True
 
         # filter, if allow_list and deny_list are both None
         elif allow_list is None and deny_list is None:
             if auto_translate_non_chinese:
                 decision = not has_cjk
-                logger.info(
-                    "条目 id=%s 启用自动翻译，has_cjk=%s -> 返回 %s",
-                    entry_id,
-                    has_cjk,
-                    decision,
-                )
                 return decision
-            logger.info("条目 id=%s 无名单配置，默认放行", entry_id)
             return True
 
-    logger.info("条目 id=%s 内容已包含起始标记或不满足过滤条件，返回 False", entry_id)
     return False
