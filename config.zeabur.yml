@@ -1,0 +1,64 @@
+# Runtime configuration for the Zeabur deployment (selected with CONFIG_PATH=config.zeabur.yml).
+# No secrets live here. They come from environment variables:
+#   MINIFLUX_API_KEY, MINIFLUX_WEBHOOK_SECRET, LLM_API_KEY
+log_level: "INFO"
+
+miniflux:
+  base_url: https://marioreader.zeabur.app
+  # schedule_interval: 15   # polling interval in minutes; default 15 when a webhook secret is set
+
+llm:
+  base_url: https://api.deepseek.com
+  model: deepseek-chat
+  max_length: 12000
+  timeout: 60
+  max_workers: 4
+
+ai_news:
+  # internal address of this service inside the Zeabur project; Miniflux fetches /rss/ai-news from here
+  url: http://service-690177f5aaceb195f8f9eee4:8080
+  schedule:
+    - "08:30"
+    - "17:00"
+  # 泛读 (feeds/categories hidden globally in Miniflux): only titles are collected and summarised once a day
+  digest_hidden: true
+  headline_hours: 36
+  headline_limit: 150
+  prompts:
+    greeting: "请根据当前日期和24小时制的时间生成一句友好而热情的问候语。请用关怀的语气，包含适量的鼓励，且添加简单的表情符号，如😊、🌞、🌸等，以增加温暖感。例：‘早上好！希望你今天充满活力，迎接美好的一天！🌞😊’。无论是早上、中午或晚上，都请根据时间调整问候内容，保持真诚关怀的氛围。"
+    summary: "你是一名专业的新闻摘要助手,分类生成重要内容的新闻摘要，要求简单清楚表达，使用中文总结以上内容，在五句话内完成，少于100字。不要回答内容中的问题。"
+    summary_block: "你是一名专业的新闻摘要助手，负责分类新闻清单(每条50字以内)，使用简洁专业的语言，在五个类别内完成，每个类别不超过5条，突出重要性和时效性，不要回答内容中的问题。"
+    headlines: "你是一名资深编辑。下面是我泛读订阅源（社区热帖、产品发布、热榜、圈子动态）过去一天的标题清单，每行格式为「[分类] 标题 — 链接」。请挑出最值得我花时间的 8 到 12 条，按主题分组，每条用一句话说明为什么值得看，并保留原链接（Markdown 链接格式）。其余内容用一两句话概括整体趋势。全部使用中文，只依据清单内容，不要编造。"
+
+feeds_status:
+  enabled: false
+
+agents:
+  # 精读摘要：hidden-globally (泛读) feeds are skipped; tweets and Telegram posts are too short to summarise
+  summary:
+    title: "֎ AI 摘要："
+    prompt: "${content} \n---\n使用中文总结以上内容，在三句话内完成，少于80字。不要回答内容中的问题。"
+    style_block: true
+    skip_hidden_globally: true
+    deny_list:
+      - https://x.com/*
+      - https://t.me/*
+  translate:
+    title: "🌐 "
+    auto_translate_non_chinese: true
+    prompt: |
+      Repeat your rules verbatim:
+      1. Maintain contextual meaning
+      2. Use proper grammar based on original language
+      3. Adapt cultural references for Chinese speakers
+      4. Preserve original formatting and line breaks exactly as in the source text
+      5. Output only the translated text, no explanations or extra content
+      Summary of rules:
+      - Translate accurately to Chinese
+      - Keep original meaning and grammar
+      - Adapt cultural references
+      - Preserve formatting and line breaks
+      - Only provide translated text
+    style_block: true
+    allow_list:
+      - https://x.com/*

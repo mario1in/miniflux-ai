@@ -20,9 +20,21 @@ BUILTIN_DENY_LIST = [
     'https://feeds-status.miniflux',
 ]
 
+def is_feed_hidden(entry):
+    """True when the feed, or its category, is marked "hide globally" in Miniflux."""
+    feed = entry.get('feed') or {}
+    if feed.get('hide_globally'):
+        return True
+    return bool((feed.get('category') or {}).get('hide_globally'))
+
+
+def category_title(entry):
+    return ((entry.get('feed') or {}).get('category') or {}).get('title') or ''
+
+
 def filter_entry(config, agent, entry):
-    start_with_list = [name[1]['title'] for name in config.agents.items()]
-    style_block = [name[1]['style_block'] for name in config.agents.items()]
+    start_with_list = [a.get('title', '') for a in config.agents.values()]
+    style_block = [a.get('style_block') for a in config.agents.values()]
     [start_with_list.append('<blockquote>') for i in style_block if i]
 
     # Todo Compatible with whitelist/blacklist parameter, to be removed
@@ -40,6 +52,17 @@ def filter_entry(config, agent, entry):
 
     # filter, if not content starts with start flag
     if not entry['content'].startswith(tuple(start_with_list)):
+        # feeds/categories marked "hide globally" in Miniflux (泛读) can be excluded per agent
+        if agent_config.get('skip_hidden_globally') and is_feed_hidden(entry):
+            return False
+        allow_categories = agent_config.get('allow_categories')
+        deny_categories = agent_config.get('deny_categories')
+        title_of_category = category_title(entry)
+        if allow_categories is not None and title_of_category not in allow_categories:
+            return False
+        if deny_categories and title_of_category in deny_categories:
+            return False
+
         plain_text = _extract_plain_text(entry)
         has_cjk = _contains_cjk(plain_text)
 

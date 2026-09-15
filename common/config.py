@@ -13,6 +13,7 @@ ENV_OVERRIDES = {
     ('llm', 'base_url'): 'LLM_BASE_URL',
     ('llm', 'api_key'): 'LLM_API_KEY',
     ('llm', 'model'): 'LLM_MODEL',
+    ('ai_news', 'url'): 'AI_NEWS_URL',
 }
 
 
@@ -45,6 +46,10 @@ class Config:
         self.ai_news_url = self.get_config_value('ai_news', 'url', None)
         self.ai_news_schedule = self.get_config_value('ai_news', 'schedule', None)
         self.ai_news_prompts = self.get_config_value('ai_news', 'prompts', None)
+        # collect titles of entries from hidden-globally feeds for a once-a-day digest (no per-entry LLM call)
+        self.ai_news_digest_hidden = self.get_config_value('ai_news', 'digest_hidden', False)
+        self.ai_news_headline_hours = self.get_config_value('ai_news', 'headline_hours', 36)
+        self.ai_news_headline_limit = self.get_config_value('ai_news', 'headline_limit', 150)
 
         self.feeds_status_enabled = self.get_config_value('feeds_status', 'enabled', False)
         self.feeds_status_url = self.get_config_value('feeds_status', 'url', self.ai_news_url)

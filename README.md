@@ -45,6 +45,11 @@ This project integrates with Miniflux to fetch RSS feed content via API or webho
 
 Credentials do not have to live in `config.yml`. The following environment variables take precedence over the file (empty values are ignored): `MINIFLUX_BASE_URL`, `MINIFLUX_API_KEY`, `MINIFLUX_WEBHOOK_SECRET`, `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. `CONFIG_PATH` selects a different config file. The API server listens on `PORT` when it is set (default 80).
 
+
+### 精读 / 泛读 (hidden-globally feeds)
+
+Feeds or categories marked **hide globally** in Miniflux are treated as "泛读" (skim). Per agent, `skip_hidden_globally: true` skips them, and `allow_categories` / `deny_categories` filter by Miniflux category title. With `ai_news.digest_hidden: true` their titles and links are collected (no LLM call) and summarised once per digest using the `ai_news.prompts.headlines` prompt; `headline_hours` / `headline_limit` bound the collected list. `AI_NEWS_URL` overrides `ai_news.url`.
+
 ## Requirements
 
 - Python 3.11+

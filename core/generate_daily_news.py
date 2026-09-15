@@ -24,21 +24,36 @@ def generate_daily_news(miniflux_client):
         logger.warning('entries.json missing or empty; skipping AI news generation')
         return []
 
-    if not entries:
-        logger.info('No cached summaries available for AI news generation')
+    summaries = [i for i in entries if i.get('kind', 'summary') != 'headline']
+    headlines = [i for i in entries if i.get('kind') == 'headline']
+    prompts = config.ai_news_prompts or {}
+
+    if not summaries and not headlines:
+        logger.info('No cached summaries or headlines available for AI news generation')
         return []
 
     try:
-        contents = '\n'.join([i['content'] for i in entries])
+        sections = []
         # greeting
-        greeting = get_ai_result(config.ai_news_prompts['greeting'], time.strftime('%B %d, %Y at %I:%M %p'))
-        # summary_block
-        summary_block = get_ai_result(config.ai_news_prompts['summary_block'], contents)
-        # summary
-        summary = get_ai_result(config.ai_news_prompts['summary'], summary_block)
+        greeting = get_ai_result(prompts['greeting'], time.strftime('%B %d, %Y at %I:%M %p'))
+        if summaries:
+            contents = '\n'.join([i['content'] for i in summaries])
+            # summary_block
+            summary_block = get_ai_result(prompts['summary_block'], contents)
+            # summary
+            summary = get_ai_result(prompts['summary'], summary_block)
+            sections.append('### 🌐Summary\n' + summary + '\n\n### 📝News\n' + summary_block)
+        if headlines and prompts.get('headlines'):
+            limit = config.ai_news_headline_limit or len(headlines)
+            listing = '\n'.join(
+                f"- [{h.get('category') or ''}] {h.get('title') or ''} — {h.get('url') or ''}"
+                for h in headlines[-limit:]
+            )
+            digest = get_ai_result(prompts['headlines'], listing)
+            sections.append('### 🗞 泛读速览\n' + digest)
 
-        response_content = greeting + '\n\n### 🌐Summary\n' + summary + '\n\n### 📝News\n' + summary_block
-        logger.info('Daily news compiled | items=%s | preview="%s"', len(entries), _preview(response_content))
+        response_content = greeting + '\n\n' + '\n\n'.join(sections)
+        logger.info('Daily news compiled | summaries=%s | headlines=%s | preview="%s"', len(summaries), len(headlines), _preview(response_content))
 
         with open('ai_news.json', 'w') as f:
             json.dump(response_content, f, indent=4, ensure_ascii=False)

@@ -2,6 +2,7 @@ import html
 import json
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from textwrap import shorten
 
 import markdown
@@ -9,7 +10,7 @@ from ratelimit import limits, sleep_and_retry
 
 from common.config import Config
 from common.logger import get_logger
-from core.entry_filter import filter_entry
+from core.entry_filter import filter_entry, is_feed_hidden
 from core.get_ai_result import get_ai_result
 
 config = Config()
@@ -22,6 +23,45 @@ def _preview(text: str, width: int = 120) -> str:
     return shorten(cleaned, width=width, placeholder='…')
 
 
+def _parse_time(value):
+    try:
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+
+
+def record_headline(entry):
+    """Store title + link of an entry from a hidden-globally feed for the daily digest. No LLM call."""
+    published = _parse_time(entry.get('published_at'))
+    if published is not None and config.ai_news_headline_hours:
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - published > timedelta(hours=config.ai_news_headline_hours):
+            return False
+    feed = entry.get('feed') or {}
+    item = {
+        'kind': 'headline',
+        'id': entry.get('id'),
+        'datetime': entry.get('published_at'),
+        'category': (feed.get('category') or {}).get('title'),
+        'feed': feed.get('title'),
+        'title': entry.get('title'),
+        'url': entry.get('url'),
+    }
+    with file_lock:
+        try:
+            with open('entries.json', 'r') as file:
+                data = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = []
+        if any(d.get('kind') == 'headline' and d.get('id') == item['id'] for d in data):
+            return False
+        data.append(item)
+        with open('entries.json', 'w') as file:
+            json.dump(data, file, indent=4, ensure_ascii=False)
+    return True
+
+
 @sleep_and_retry
 @limits(calls=config.llm_RPM, period=60)
 def process_entry(miniflux_client, entry):
@@ -32,6 +72,10 @@ def process_entry(miniflux_client, entry):
     feed_title = feed.get('title')
 
     logger.debug('Processing entry | id=%s | feed="%s" | title="%s"', entry_id, feed_title, entry.get('title'))
+
+    if config.ai_news_digest_hidden and is_feed_hidden(entry):
+        if record_headline(entry):
+            logger.debug('Recorded headline for the daily digest | id=%s | feed="%s"', entry_id, feed_title)
 
     for agent_name, agent_config in config.agents.items():
         if not filter_entry(config, (agent_name, agent_config), entry):
