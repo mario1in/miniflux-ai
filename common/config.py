@@ -1,9 +1,26 @@
+import os
+
 from yaml import safe_load
+
+# Secrets and connection settings can be supplied as environment variables so that
+# config.yml never has to contain credentials. An environment variable wins over
+# the value in config.yml; empty variables are ignored.
+ENV_OVERRIDES = {
+    ('miniflux', 'base_url'): 'MINIFLUX_BASE_URL',
+    ('miniflux', 'api_key'): 'MINIFLUX_API_KEY',
+    ('miniflux', 'webhook_secret'): 'MINIFLUX_WEBHOOK_SECRET',
+    ('llm', 'provider'): 'LLM_PROVIDER',
+    ('llm', 'base_url'): 'LLM_BASE_URL',
+    ('llm', 'api_key'): 'LLM_API_KEY',
+    ('llm', 'model'): 'LLM_MODEL',
+}
+
 
 class Config:
     def __init__(self):
-        with open('config.yml', encoding='utf8') as config_file:
-            self.c = safe_load(config_file)
+        config_path = os.environ.get('CONFIG_PATH', 'config.yml')
+        with open(config_path, encoding='utf8') as config_file:
+            self.c = safe_load(config_file) or {}
         self.log_level = self.c.get('log_level', 'INFO')
 
         self.miniflux_base_url = self.get_config_value('miniflux', 'base_url', None)
@@ -36,4 +53,10 @@ class Config:
         self.agents = self.c.get('agents', {})
 
     def get_config_value(self, section, key, default=None):
-        return self.c.get(section, {}).get(key, default)
+        env_name = ENV_OVERRIDES.get((section, key))
+        if env_name:
+            env_value = os.environ.get(env_name)
+            if env_value not in (None, ''):
+                return env_value
+        section_values = self.c.get(section) or {}
+        return section_values.get(key, default)

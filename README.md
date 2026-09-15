@@ -40,6 +40,11 @@ This project integrates with Miniflux to fetch RSS feed content via API or webho
   </tr>
 </table>
 
+
+### Environment variable overrides
+
+Credentials do not have to live in `config.yml`. The following environment variables take precedence over the file (empty values are ignored): `MINIFLUX_BASE_URL`, `MINIFLUX_API_KEY`, `MINIFLUX_WEBHOOK_SECRET`, `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. `CONFIG_PATH` selects a different config file. The API server listens on `PORT` when it is set (default 80).
+
 ## Requirements
 
 - Python 3.11+
