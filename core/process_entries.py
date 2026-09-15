@@ -1,26 +1,24 @@
+import html
 import json
 import threading
 import time
 from textwrap import shorten
-import html
 
 import markdown
-from markdownify import markdownify as md
-from openai import OpenAI
 from ratelimit import limits, sleep_and_retry
 
 from common.config import Config
 from common.logger import get_logger
 from core.entry_filter import filter_entry
+from core.get_ai_result import get_ai_result
 
 config = Config()
-llm_client = OpenAI(base_url=config.llm_base_url, api_key=config.llm_api_key)
 file_lock = threading.Lock()
 logger = get_logger(__name__)
 
 
 def _preview(text: str, width: int = 120) -> str:
-    cleaned = text.replace('\n', ' ').replace('\r', ' ').strip()
+    cleaned = (text or '').replace('\n', ' ').replace('\r', ' ').strip()
     return shorten(cleaned, width=width, placeholder='…')
 
 
@@ -30,60 +28,46 @@ def process_entry(miniflux_client, entry):
     # Todo change to queue
     llm_result = ''
     entry_id = entry.get('id')
-    feed = entry.get('feed', {})
+    feed = entry.get('feed') or {}
     feed_title = feed.get('title')
 
-    logger.info(
-        'Processing entry | id=%s | feed="%s" | title="%s"',
-        entry_id,
-        feed_title,
-        entry.get('title'),
-    )
+    logger.debug('Processing entry | id=%s | feed="%s" | title="%s"', entry_id, feed_title, entry.get('title'))
 
     for agent_name, agent_config in config.agents.items():
-        agent_prompt = agent_config.get('prompt', '')
         if not filter_entry(config, (agent_name, agent_config), entry):
             logger.debug('Agent %s skipped by filters for entry %s', agent_name, entry_id)
             continue
 
         agent_start = time.time()
-        if '${content}' in agent_prompt:
-            messages = [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": agent_prompt.replace('${content}', md(entry.get('content', '')))}
-            ]
-        else:
-            messages = [
-                {"role": "system", "content": agent_prompt},
-                {"role": "user", "content": "\n---\n " + md(entry.get('content', ''))}
-            ]
-
         try:
-            completion = llm_client.chat.completions.create(
-                model=config.llm_model,
-                messages=messages,
-                timeout=config.llm_timeout
-            )
+            response_content = get_ai_result(agent_config.get('prompt', ''), entry.get('content', ''))
         except Exception as exc:
-            logger.error('Agent %s failed to fetch LLM result for entry %s', agent_name, entry_id, exc_info=exc)
-            raise
+            logger.error('Agent %s failed for entry %s: %s', agent_name, entry_id, exc)
+            logger.debug('Agent traceback', exc_info=exc)
+            continue
 
-        response_content = completion.choices[0].message.content or ''
-        duration = time.time() - agent_start
+        response_content = (response_content or '').strip()
+        if not response_content:
+            logger.warning('Agent %s returned empty output for entry %s', agent_name, entry_id)
+            continue
+
         logger.info(
-            'Agent %s completed entry %s in %.2fs | preview="%s"',
+            'Agent %s completed entry %s in %.2fs | feed="%s" | preview="%s"',
             agent_name,
             entry_id,
-            duration,
+            time.time() - agent_start,
+            feed_title,
             _preview(response_content),
         )
 
+        # save for ai_summary
         if agent_name == 'summary':
             entry_list = {
                 'datetime': entry.get('created_at'),
-                'category': feed.get('category', {}).get('title') if feed else None,
+                'category': (feed.get('category') or {}).get('title'),
                 'title': entry.get('title'),
-                'content': response_content
+                'content': response_content,
+                'url': entry.get('url'),
             }
             with file_lock:
                 try:
@@ -97,17 +81,12 @@ def process_entry(miniflux_client, entry):
             logger.debug('Persisted summary snapshot for entry %s', entry_id)
 
         if agent_config.get('style_block'):
-            formatted_block = (
-                '<div style="border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; '
-                'margin: 16px 0; background-color: #f9fafb; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);">'
-                f'<div style="font-size: 1.05em; font-weight: 600; color: #374151; margin-bottom: 8px;">{agent_config.get("title", "")}</div>'
-                '<pre style="white-space: pre-wrap; font-family: \"SFMono-Regular\", Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; '
-                'font-size: 0.96em; line-height: 1.6; color: #1f2937; margin: 0;">\n'
-                f'{html.escape(response_content.strip())}\n'
-                '</pre>'
-                '</div><hr><br />'
-            )
-            llm_result = llm_result + formatted_block
+            # Keep the LLM's line breaks; the leading <blockquote> is also the "already processed" marker used by entry_filter
+            body = html.escape(response_content).replace('\n', '<br>')
+            llm_result = (llm_result + '<blockquote>\n  <p><strong>'
+                          + agent_config.get('title', '') + '</strong> '
+                          + body
+                          + '\n</p>\n</blockquote><br/>')
         else:
             llm_result = llm_result + f"{agent_config.get('title', '')}{markdown.markdown(response_content)}<hr><br />"
 

@@ -14,10 +14,16 @@ def _contains_cjk(text):
     return bool(_CJK_PATTERN.search(text))
 
 
+# Built-in deny list for internal feeds that should never be processed by any agent
+BUILTIN_DENY_LIST = [
+    'https://ai-news.miniflux',
+    'https://feeds-status.miniflux',
+]
+
 def filter_entry(config, agent, entry):
     start_with_list = [name[1]['title'] for name in config.agents.items()]
     style_block = [name[1]['style_block'] for name in config.agents.items()]
-    [start_with_list.append('<pre') for i in style_block if i]
+    [start_with_list.append('<blockquote>') for i in style_block if i]
 
     # Todo Compatible with whitelist/blacklist parameter, to be removed
     agent_config = agent[1]
@@ -27,6 +33,10 @@ def filter_entry(config, agent, entry):
 
     site_url = (entry.get('feed') or {}).get('site_url', '')
     entry_id = entry.get('id')
+
+    # Always block internal URLs regardless of agent config
+    if any(fnmatch.fnmatch(entry['feed']['site_url'], pattern) for pattern in BUILTIN_DENY_LIST):
+        return False
 
     # filter, if not content starts with start flag
     if not entry['content'].startswith(tuple(start_with_list)):

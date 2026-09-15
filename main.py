@@ -1,10 +1,13 @@
 import concurrent.futures
+import os
 import time
+import traceback
 
 import miniflux
 import schedule
 
 from common import Config, get_logger
+from services.feeds_status_service import ensure_miniflux_feed, generate_feeds_status, resolve_feeds_status_url
 from myapp import app
 from core import fetch_unread_entries, generate_daily_news
 
@@ -28,34 +31,67 @@ while True:
         logger.debug('Miniflux connection traceback', exc_info=exc)
         time.sleep(3)
 
+
+def resolve_ai_news_url():
+    if not config.ai_news_url:
+        return None
+    return config.ai_news_url.rstrip('/') + '/rss/ai-news'
+
+
 def my_schedule():
-    interval = 15 if config.miniflux_webhook_secret else 1
+    if config.miniflux_schedule_interval:
+        interval = config.miniflux_schedule_interval
+    else:
+        interval = 15 if config.miniflux_webhook_secret else 1
     logger.info('Scheduling unread entry polling every %s minute(s)', interval)
     schedule.every(interval).minutes.do(fetch_unread_entries, config, miniflux_client)
-    schedule.run_all()
+    try:
+        schedule.run_all()
+    except Exception as exc:
+        logger.error('Initial fetch cycle failed: %s', exc)
+        logger.error(traceback.format_exc())
     logger.info('Initial fetch cycle completed')
 
     if config.ai_news_schedule:
-        feeds = miniflux_client.get_feeds()
-        if not any('Newsᴬᴵ for you' in item['title'] for item in feeds):
-            try:
-                miniflux_client.create_feed(category_id=1, feed_url=config.ai_news_url + '/rss/ai-news')
-                logger.info('Created the ai_news feed in Miniflux')
-            except Exception as exc:
-                logger.error('Failed to create the ai_news feed in Miniflux: %s', exc, exc_info=exc)
+        try:
+            ensure_miniflux_feed(miniflux_client, resolve_ai_news_url(), 'ai_news')
+        except Exception as exc:
+            logger.error('Failed to ensure the ai_news feed in Miniflux: %s', exc)
         for ai_schedule in config.ai_news_schedule:
-            logger.info('Scheduling AI news generation at %s', ai_schedule)
             schedule.every().day.at(ai_schedule).do(generate_daily_news, miniflux_client)
+            logger.info('Scheduled AI news generation at %s', ai_schedule)
+
+    if config.feeds_status_enabled:
+        try:
+            ensure_miniflux_feed(miniflux_client, resolve_feeds_status_url(config.feeds_status_url), 'feeds_status')
+        except Exception as exc:
+            logger.error('Failed to ensure the feeds_status feed in Miniflux: %s', exc)
+        schedule.every().day.at(config.feeds_status_schedule).do(
+            generate_feeds_status,
+            miniflux_client,
+            config.feeds_status_url,
+        )
+        logger.info('Scheduled feeds_status generation at %s', config.feeds_status_schedule)
 
     while True:
-        schedule.run_pending()
-        time.sleep(1)
+        try:
+            schedule.run_pending()
+            time.sleep(1)
+        except Exception as exc:
+            logger.error('An error occurred in the schedule loop: %s', exc)
+            logger.error(traceback.format_exc())
+            time.sleep(30)
+
 
 def my_flask():
-    logger.info('Starting API server on 0.0.0.0:80')
-    app.run(host='0.0.0.0', port=80)
+    # Honor the platform-provided PORT (Zeabur/Heroku style); default to 80 for docker-compose setups
+    port = int(os.environ.get('PORT', 80))
+    logger.info('Starting API server on 0.0.0.0:%s', port)
+    app.run(host='0.0.0.0', port=port)
+
 
 if __name__ == '__main__':
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        executor.submit(my_flask)
+        if config.ai_news_schedule or config.miniflux_webhook_secret or config.feeds_status_enabled:
+            executor.submit(my_flask)
         executor.submit(my_schedule)

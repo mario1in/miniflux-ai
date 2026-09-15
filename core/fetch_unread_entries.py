@@ -6,10 +6,22 @@ from core.process_entries import process_entry
 
 logger = get_logger(__name__)
 
+# Miniflux >= 2.3 rejects limit values above 1000
+ENTRY_LIMIT = 1000
+
+
 def fetch_unread_entries(config, miniflux_client):
     start_time = time.time()
     logger.info('Task fetch_unread_entries started')
-    entries = miniflux_client.get_entries(status=['unread'], limit=10000)
+    try:
+        entries = miniflux_client.get_entries(
+            status=['unread'], limit=ENTRY_LIMIT, order='published_at', direction='desc'
+        )
+    except Exception as exc:
+        logger.error('Failed to fetch unread entries from Miniflux: %s', exc)
+        logger.debug('Fetch traceback', exc_info=exc)
+        return
+
     unread_entries = entries.get('entries', [])
     total = len(unread_entries)
 
@@ -17,7 +29,7 @@ def fetch_unread_entries(config, miniflux_client):
         logger.info('No unread entries found')
         return
 
-    logger.info('Fetched %s unread entries (limit=10000)', total)
+    logger.info('Fetched %s unread entries (limit=%s)', total, ENTRY_LIMIT)
     processed = 0
     failed = 0
 

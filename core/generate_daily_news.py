@@ -11,7 +11,8 @@ logger = get_logger(__name__)
 
 
 def _preview(text: str) -> str:
-    return shorten(text.replace('\n', ' ').strip(), width=160, placeholder='…')
+    return shorten((text or '').replace('\n', ' ').strip(), width=160, placeholder='…')
+
 
 def generate_daily_news(miniflux_client):
     logger.info('Generating daily news digest')
@@ -27,29 +28,37 @@ def generate_daily_news(miniflux_client):
         logger.info('No cached summaries available for AI news generation')
         return []
 
-    contents = '\n'.join([i['content'] for i in entries])
-    # greeting
-    greeting = get_ai_result(config.ai_news_prompts['greeting'], time.strftime('%B %d, %Y at %I:%M %p'))
-    # summary_block
-    summary_block = get_ai_result(config.ai_news_prompts['summary_block'], contents)
-    # summary
-    summary = get_ai_result(config.ai_news_prompts['summary'], summary_block)
+    try:
+        contents = '\n'.join([i['content'] for i in entries])
+        # greeting
+        greeting = get_ai_result(config.ai_news_prompts['greeting'], time.strftime('%B %d, %Y at %I:%M %p'))
+        # summary_block
+        summary_block = get_ai_result(config.ai_news_prompts['summary_block'], contents)
+        # summary
+        summary = get_ai_result(config.ai_news_prompts['summary'], summary_block)
 
-    response_content = greeting + '\n\n### 🌐Summary\n' + summary + '\n\n### 📝News\n' + summary_block
+        response_content = greeting + '\n\n### 🌐Summary\n' + summary + '\n\n### 📝News\n' + summary_block
+        logger.info('Daily news compiled | items=%s | preview="%s"', len(entries), _preview(response_content))
 
-    logger.info('Daily news compiled | items=%s | preview="%s"', len(entries), _preview(response_content))
+        with open('ai_news.json', 'w') as f:
+            json.dump(response_content, f, indent=4, ensure_ascii=False)
 
-    # empty entries.json
-    with open('entries.json', 'w') as f:
-        json.dump([], f, indent=4, ensure_ascii=False)
+        # trigger miniflux feed refresh
+        feeds = miniflux_client.get_feeds()
+        ai_news_feed_id = next((item['id'] for item in feeds if 'Newsᴬᴵ for you' in item['title']), None)
 
-    with open('ai_news.json', 'w') as f:
-        json.dump(response_content, f, indent=4, ensure_ascii=False)
+        if ai_news_feed_id:
+            miniflux_client.refresh_feed(ai_news_feed_id)
+            logger.debug('Refreshed the ai_news feed in Miniflux | feed_id=%s', ai_news_feed_id)
 
-    # trigger miniflux feed refresh
-    feeds = miniflux_client.get_feeds()
-    ai_news_feed_id = next((item['id'] for item in feeds if 'Newsᴬᴵ for you' in item['title']), None)
+    except Exception as exc:
+        logger.error('Error generating daily news: %s', exc)
+        logger.debug('Daily news traceback', exc_info=exc)
 
-    if ai_news_feed_id:
-        miniflux_client.refresh_feed(ai_news_feed_id)
-        logger.debug('Refreshed the ai_news feed in Miniflux | feed_id=%s', ai_news_feed_id)
+    finally:
+        try:
+            with open('entries.json', 'w') as f:
+                json.dump([], f, indent=4, ensure_ascii=False)
+            logger.info('Cleared entries.json')
+        except Exception as exc:
+            logger.error('Failed to clear entries.json: %s', exc)

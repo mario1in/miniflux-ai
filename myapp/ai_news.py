@@ -3,7 +3,6 @@ from datetime import datetime
 import time
 
 import markdown
-from openai import OpenAI
 from feedgen.feed import FeedGenerator
 
 from common.config import Config
@@ -11,7 +10,6 @@ from common.logger import get_logger
 from myapp import app
 
 config = Config()
-llm_client = OpenAI(base_url=config.llm_base_url, api_key=config.llm_api_key)
 logger = get_logger(__name__)
 
 @app.route('/rss/ai-news', methods=['GET'])

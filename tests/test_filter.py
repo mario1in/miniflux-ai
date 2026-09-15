@@ -26,7 +26,7 @@ class FilterEntryTest(unittest.TestCase):
         agent = ('translate', agent_config)
         entry = {
             'title': 'Example',
-            'content': '<pre translated content',
+            'content': '<blockquote>\n  <p><strong>🌐 </strong> translated content</p>\n</blockquote><br/>',
             'feed': {'site_url': 'https://example.com'}
         }
 
