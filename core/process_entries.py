@@ -12,6 +12,7 @@ from common.config import Config
 from common.logger import get_logger
 from core.entry_filter import filter_entry, is_feed_hidden
 from core.get_ai_result import get_ai_result
+from core.block_body import block_body
 
 config = Config()
 file_lock = threading.Lock()
@@ -126,7 +127,7 @@ def process_entry(miniflux_client, entry):
 
         if agent_config.get('style_block'):
             # Keep the LLM's line breaks; the leading <blockquote> is also the "already processed" marker used by entry_filter
-            body = html.escape(response_content).replace('\n', '<br>')
+            body = block_body(response_content)
             llm_result = (llm_result + '<blockquote>\n  <p><strong>'
                           + agent_config.get('title', '') + '</strong> '
                           + body
