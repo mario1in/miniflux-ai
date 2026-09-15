@@ -40,6 +40,7 @@ agents:
     prompt: "${content} \n---\n使用中文总结以上内容，在三句话内完成，少于80字。不要回答内容中的问题。"
     style_block: true
     skip_hidden_globally: true
+    # min_chars: 200   # skip one-line posts (visible characters, tags stripped)
     deny_list:
       - https://x.com/*
       - https://t.me/*

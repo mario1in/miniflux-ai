@@ -70,6 +70,8 @@ The repository includes a template configuration file: `config.sample.yml`. Modi
 - **LLM**: Model settings, API key, and endpoint.Add timeout, max_workers parameters due to multithreading
 - **AI News**: Schedule and prompts for daily news generation
 - **Agents**: Define each agent's prompt, allow_list/deny_list filters, and output style（`style_block` parameter controls whether the output is formatted as a code block in Markdown）。You can also enable behaviors such as auto-translating non-Chinese content via `auto_translate_non_chinese`.
+  - `auto_translate_non_chinese` looks at the dominant script of the post (links, @handles and #tags ignored): Japanese/Korean is always translated; other text needs at least 3 words of a non-Han script and fewer Han characters than words. An English tweet that names a Chinese person is translated, a Chinese post that mentions a few English products is not, and a post that is only a link or an image is never sent to the model.
+  - `min_chars`: skip posts with fewer visible characters than this (per agent), e.g. `min_chars: 200` on a summary agent avoids summarising one-line posts.
 
 ## Docker Setup
 
