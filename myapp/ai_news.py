@@ -7,6 +7,7 @@ from feedgen.feed import FeedGenerator
 
 from common.config import Config
 from common.logger import get_logger
+from common.paths import data_path
 from myapp import app
 
 config = Config()
@@ -28,7 +29,7 @@ def miniflux_ai_news():
     # Todo 根据需要获取最近时间内的文章，或总结后的列表
     logger.info('Serving AI news RSS request')
     try:
-        with open('ai_news.json', 'r') as file:
+        with open(data_path('ai_news.json'), 'r') as file:
             ai_news = json.load(file)
     except FileNotFoundError:
         ai_news = ''
@@ -38,7 +39,7 @@ def miniflux_ai_news():
         ai_news = ''
 
     # 清空 ai_news.json
-    with open('ai_news.json', 'w') as file:
+    with open(data_path('ai_news.json'), 'w') as file:
         json.dump('', file, indent=4, ensure_ascii=False)
 
 

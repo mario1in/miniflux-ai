@@ -11,6 +11,7 @@ from ratelimit import limits, sleep_and_retry
 
 from common.config import Config
 from common.logger import get_logger
+from common.paths import data_path
 from core.entry_filter import category_title, filter_entry, is_feed_hidden, plain_text
 from core.get_ai_result import get_ai_result
 from core.block_body import block_body
@@ -54,14 +55,14 @@ def _record_item(entry, kind, content=None):
         item['content'] = content
     with file_lock:
         try:
-            with open('entries.json', 'r') as file:
+            with open(data_path('entries.json'), 'r') as file:
                 data = json.load(file)
         except (FileNotFoundError, json.JSONDecodeError):
             data = []
         if any(d.get('kind') == kind and d.get('id') == item['id'] for d in data):
             return False
         data.append(item)
-        with open('entries.json', 'w') as file:
+        with open(data_path('entries.json'), 'w') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
     return True
 
@@ -148,12 +149,12 @@ def process_entry(miniflux_client, entry):
             }
             with file_lock:
                 try:
-                    with open('entries.json', 'r') as file:
+                    with open(data_path('entries.json'), 'r') as file:
                         data = json.load(file)
                 except (FileNotFoundError, json.JSONDecodeError):
                     data = []
                 data.append(entry_list)
-                with open('entries.json', 'w') as file:
+                with open(data_path('entries.json'), 'w') as file:
                     json.dump(data, file, indent=4, ensure_ascii=False)
             logger.debug('Persisted summary snapshot for entry %s', entry_id)
 

@@ -6,10 +6,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 
+from common.paths import data_path
+
 
 logger = logging.getLogger(__name__)
 
-FEEDS_STATUS_FILE = Path("feeds_status.json")
+FEEDS_STATUS_FILE = data_path("feeds_status.json")
 FEEDS_STATUS_FEED_ID = "https://feeds-status.miniflux"
 FEEDS_STATUS_FEED_TITLE = "Miniflux Feeds Status"
 FEEDS_STATUS_FEED_PATH = "/rss/feeds-status"

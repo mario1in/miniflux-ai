@@ -4,6 +4,7 @@ from textwrap import shorten
 
 from common.config import Config
 from common.logger import get_logger
+from common.paths import data_path
 from core.get_ai_result import get_ai_result
 
 config = Config()
@@ -18,7 +19,7 @@ def generate_daily_news(miniflux_client):
     logger.info('Generating daily news digest')
     # fetch entries.json
     try:
-        with open('entries.json', 'r') as f:
+        with open(data_path('entries.json'), 'r') as f:
             entries = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         logger.warning('entries.json missing or empty; skipping AI news generation')
@@ -61,7 +62,7 @@ def generate_daily_news(miniflux_client):
         logger.info('Daily news compiled | summaries=%s | excerpts=%s | headlines=%s | preview="%s"',
                     len(summaries), len(excerpts), len(headlines), _preview(response_content))
 
-        with open('ai_news.json', 'w') as f:
+        with open(data_path('ai_news.json'), 'w') as f:
             json.dump(response_content, f, indent=4, ensure_ascii=False)
 
         # trigger miniflux feed refresh
@@ -78,7 +79,7 @@ def generate_daily_news(miniflux_client):
 
     finally:
         try:
-            with open('entries.json', 'w') as f:
+            with open(data_path('entries.json'), 'w') as f:
                 json.dump([], f, indent=4, ensure_ascii=False)
             logger.info('Cleared entries.json')
         except Exception as exc:
