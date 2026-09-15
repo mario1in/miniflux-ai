@@ -186,8 +186,11 @@ class TranslationDecisionTest(unittest.TestCase):
         content = '新しいモデルを公開しました。詳細はブログをご覧ください。'
         self.assertTrue(self.decide(content, content))
 
-    def test_two_words_and_a_handle_are_too_little_to_translate(self):
+    def test_one_word_plus_handle_and_link_is_too_little_to_translate(self):
         self.assertFalse(self.decide('gm @everyone', 'gm @everyone https://t.co/abc'))
+
+    def test_retweet_prefix_and_name_alone_are_not_translated(self):
+        self.assertFalse(self.decide('RT Someone', 'RT Someone<br><img src="https://pbs.twimg.com/media/a.jpg">'))
 
     def test_min_chars_skips_short_posts(self):
         agent_config = {'title': '֎ AI 摘要：', 'style_block': True, 'min_chars': 200}

@@ -5,12 +5,13 @@ import re
 _TAG_RE = re.compile(r'<[^>]+>')
 _URL_RE = re.compile(r'(?:https?://|www\.)\S+')
 _HANDLE_RE = re.compile(r'[@#]\w+')
+_RT_RE = re.compile(r'^\s*RT\b')                                  # retweet prefix
 _CJK_RE = re.compile(r'[\u3400-\u4dbf\u4e00-\u9fff]')            # Han ideographs
 _KANA_HANGUL_RE = re.compile(r'[\u3040-\u30ff\uac00-\ud7af]')    # Japanese kana, Korean hangul
 _WORD_RE = re.compile(r'[^\W\d_]{2,}')                            # runs of letters in any other script
 
-# Fewer words than this and there is nothing to translate (a bare link, an emoji, a name).
-MIN_WORDS_TO_TRANSLATE = 3
+# Fewer words than this and there is nothing to translate (a bare link, an emoji, a single name).
+MIN_WORDS_TO_TRANSLATE = 2
 
 
 def plain_text(value):
@@ -21,7 +22,7 @@ def plain_text(value):
 def script_profile(text):
     """(han, kana_hangul, words): Han characters, kana/hangul characters, and words of any other script.
     Links, @handles and #tags do not count."""
-    text = _HANDLE_RE.sub(' ', _URL_RE.sub(' ', plain_text(text)))
+    text = _HANDLE_RE.sub(' ', _URL_RE.sub(' ', _RT_RE.sub(' ', plain_text(text))))
     han = len(_CJK_RE.findall(text))
     kana_hangul = len(_KANA_HANGUL_RE.findall(text))
     words = len(_WORD_RE.findall(_KANA_HANGUL_RE.sub(' ', _CJK_RE.sub(' ', text))))
