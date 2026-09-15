@@ -8,6 +8,7 @@ from flask import abort, jsonify, request
 from common.config import Config
 from common.logger import get_logger
 from core import process_entry
+from core.feed_info import full_feed
 from myapp import app
 
 config = Config()
@@ -46,12 +47,15 @@ def miniflux_ai():
 
     entries_payload = request.json or {}
     entry_items = entries_payload.get('entries', [])
-    feed = entries_payload.get('feed', {})
+    # the webhook's feed object has no category / hide_globally: complete it from the API (cached) so the
+    # category and 泛读 rules apply to entries pushed by the webhook exactly as they do to polled ones
+    feed = full_feed(miniflux_client, entries_payload.get('feed', {}))
 
     logger.info(
-        'Webhook received | entries=%s | feed="%s"',
+        'Webhook received | entries=%s | feed="%s" | category="%s"',
         len(entry_items),
         feed.get('title'),
+        (feed.get('category') or {}).get('title'),
     )
 
     for entry in entry_items:

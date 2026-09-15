@@ -72,6 +72,7 @@ The repository includes a template configuration file: `config.sample.yml`. Modi
 - **Agents**: Define each agent's prompt, allow_list/deny_list filters, and output style（`style_block` parameter controls whether the output is formatted as a code block in Markdown）。You can also enable behaviors such as auto-translating non-Chinese content via `auto_translate_non_chinese`.
   - `auto_translate_non_chinese` looks at the dominant script of the post (links, @handles and #tags ignored): Japanese/Korean is always translated; other text needs at least 3 words of a non-Han script and fewer Han characters than words. An English tweet that names a Chinese person is translated, a Chinese post that mentions a few English products is not, and a post that is only a link or an image is never sent to the model.
   - `min_chars`: skip posts with fewer visible characters than this (per agent), e.g. `min_chars: 200` on a summary agent avoids summarising one-line posts.
+- **AI News without a per-entry summary**: the digest's news list is built from the `summary` agent's output, so a category the agent skips (`deny_categories`) would vanish from the digest. List such categories under `ai_news.excerpt_categories` and their entries reach the digest as the opening `excerpt_chars` characters of the post (default 120, newest `excerpt_limit` entries, default 80) with no model call.
 
 ## Docker Setup
 

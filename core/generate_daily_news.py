@@ -24,20 +24,25 @@ def generate_daily_news(miniflux_client):
         logger.warning('entries.json missing or empty; skipping AI news generation')
         return []
 
-    summaries = [i for i in entries if i.get('kind', 'summary') != 'headline']
+    summaries = [i for i in entries if i.get('kind', 'summary') == 'summary']
+    # excerpts (ai_news.excerpt_categories) sit next to the summaries in the news list; newest ones win when capped
+    excerpt_limit = config.ai_news_excerpt_limit or 0
+    excerpts = [i for i in entries if i.get('kind') == 'excerpt' and i.get('content')]
+    if excerpt_limit and len(excerpts) > excerpt_limit:
+        excerpts = excerpts[-excerpt_limit:]
     headlines = [i for i in entries if i.get('kind') == 'headline']
     prompts = config.ai_news_prompts or {}
 
-    if not summaries and not headlines:
-        logger.info('No cached summaries or headlines available for AI news generation')
+    if not summaries and not excerpts and not headlines:
+        logger.info('No cached summaries, excerpts or headlines available for AI news generation')
         return []
 
     try:
         sections = []
         # greeting
         greeting = get_ai_result(prompts['greeting'], time.strftime('%B %d, %Y at %I:%M %p'))
-        if summaries:
-            contents = '\n'.join([i['content'] for i in summaries])
+        if summaries or excerpts:
+            contents = '\n'.join([i['content'] for i in summaries + excerpts])
             # summary_block
             summary_block = get_ai_result(prompts['summary_block'], contents)
             # summary
@@ -53,7 +58,8 @@ def generate_daily_news(miniflux_client):
             sections.append('### 🗞 泛读速览\n' + digest)
 
         response_content = greeting + '\n\n' + '\n\n'.join(sections)
-        logger.info('Daily news compiled | summaries=%s | headlines=%s | preview="%s"', len(summaries), len(headlines), _preview(response_content))
+        logger.info('Daily news compiled | summaries=%s | excerpts=%s | headlines=%s | preview="%s"',
+                    len(summaries), len(excerpts), len(headlines), _preview(response_content))
 
         with open('ai_news.json', 'w') as f:
             json.dump(response_content, f, indent=4, ensure_ascii=False)

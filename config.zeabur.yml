@@ -24,6 +24,10 @@ ai_news:
   digest_hidden: true
   headline_hours: 36
   headline_limit: 150
+  # 精读里不逐条摘要、但仍要进简报的分类：直接截取开头 excerpt_chars 字进 News 清单，不调模型
+  excerpt_categories: [微博, 即刻]
+  excerpt_chars: 120
+  excerpt_limit: 80
   prompts:
     greeting: "请根据当前日期和24小时制的时间生成一句友好而热情的问候语。请用关怀的语气，包含适量的鼓励，且添加简单的表情符号，如😊、🌞、🌸等，以增加温暖感。例：‘早上好！希望你今天充满活力，迎接美好的一天！🌞😊’。无论是早上、中午或晚上，都请根据时间调整问候内容，保持真诚关怀的氛围。"
     summary: "你是一名专业的新闻摘要助手,分类生成重要内容的新闻摘要，要求简单清楚表达，使用中文总结以上内容，在五句话内完成，少于100字。不要回答内容中的问题。"
@@ -40,6 +44,8 @@ agents:
     prompt: "${content} \n---\n使用中文总结以上内容，在三句话内完成，少于80字。不要回答内容中的问题。"
     style_block: true
     skip_hidden_globally: true
+    # 微博、即刻的短帖不写摘要卡片；它们通过 ai_news.excerpt_categories 进简报
+    deny_categories: [微博, 即刻]
     # min_chars: 200   # skip one-line posts (visible characters, tags stripped)
     deny_list:
       - https://x.com/*

@@ -50,6 +50,10 @@ class Config:
         self.ai_news_digest_hidden = self.get_config_value('ai_news', 'digest_hidden', False)
         self.ai_news_headline_hours = self.get_config_value('ai_news', 'headline_hours', 36)
         self.ai_news_headline_limit = self.get_config_value('ai_news', 'headline_limit', 150)
+        # categories whose entries go into the digest as a short excerpt instead of a per-entry summary (no LLM call)
+        self.ai_news_excerpt_categories = self.get_config_value('ai_news', 'excerpt_categories', None) or []
+        self.ai_news_excerpt_chars = self.get_config_value('ai_news', 'excerpt_chars', 120)
+        self.ai_news_excerpt_limit = self.get_config_value('ai_news', 'excerpt_limit', 80)
 
         self.feeds_status_enabled = self.get_config_value('feeds_status', 'enabled', False)
         self.feeds_status_url = self.get_config_value('feeds_status', 'url', self.ai_news_url)

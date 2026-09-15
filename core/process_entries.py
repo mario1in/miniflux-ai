@@ -1,5 +1,6 @@
 import html
 import json
+import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,7 @@ from ratelimit import limits, sleep_and_retry
 
 from common.config import Config
 from common.logger import get_logger
-from core.entry_filter import filter_entry, is_feed_hidden
+from core.entry_filter import category_title, filter_entry, is_feed_hidden, plain_text
 from core.get_ai_result import get_ai_result
 from core.block_body import block_body
 
@@ -31,8 +32,8 @@ def _parse_time(value):
         return None
 
 
-def record_headline(entry):
-    """Store title + link of an entry from a hidden-globally feed for the daily digest. No LLM call."""
+def _record_item(entry, kind, content=None):
+    """Store an entry for the daily digest without an LLM call; deduplicated by (kind, id), bounded by headline_hours."""
     published = _parse_time(entry.get('published_at'))
     if published is not None and config.ai_news_headline_hours:
         if published.tzinfo is None:
@@ -41,7 +42,7 @@ def record_headline(entry):
             return False
     feed = entry.get('feed') or {}
     item = {
-        'kind': 'headline',
+        'kind': kind,
         'id': entry.get('id'),
         'datetime': entry.get('published_at'),
         'category': (feed.get('category') or {}).get('title'),
@@ -49,18 +50,46 @@ def record_headline(entry):
         'title': entry.get('title'),
         'url': entry.get('url'),
     }
+    if content is not None:
+        item['content'] = content
     with file_lock:
         try:
             with open('entries.json', 'r') as file:
                 data = json.load(file)
         except (FileNotFoundError, json.JSONDecodeError):
             data = []
-        if any(d.get('kind') == 'headline' and d.get('id') == item['id'] for d in data):
+        if any(d.get('kind') == kind and d.get('id') == item['id'] for d in data):
             return False
         data.append(item)
         with open('entries.json', 'w') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
     return True
+
+
+def record_headline(entry):
+    """Title + link of an entry from a hidden-globally feed (泛读速览)."""
+    return _record_item(entry, 'headline')
+
+
+def _normalised(text):
+    return re.sub(r'[\W_]+', '', text or '').lower()
+
+
+def excerpt_of(entry, chars):
+    """The first `chars` visible characters of the entry, prefixed with the title unless the text already starts with it
+    (social posts use their first line as the title)."""
+    text = re.sub(r'\s+', ' ', plain_text(entry.get('content'))).strip()
+    title = re.sub(r'\s+', ' ', entry.get('title') or '').strip()
+    excerpt = shorten(text, width=chars, placeholder='…') if text else ''
+    probe = _normalised(title)[:20]
+    if title and not (probe and _normalised(text).startswith(probe)):
+        excerpt = f'{title}：{excerpt}' if excerpt else title
+    return excerpt
+
+
+def record_excerpt(entry):
+    """Opening of an entry from an `ai_news.excerpt_categories` category: goes into the digest in place of a summary."""
+    return _record_item(entry, 'excerpt', content=excerpt_of(entry, config.ai_news_excerpt_chars))
 
 
 @sleep_and_retry
@@ -74,9 +103,12 @@ def process_entry(miniflux_client, entry):
 
     logger.debug('Processing entry | id=%s | feed="%s" | title="%s"', entry_id, feed_title, entry.get('title'))
 
-    if config.ai_news_digest_hidden and is_feed_hidden(entry):
-        if record_headline(entry):
+    if is_feed_hidden(entry):
+        if config.ai_news_digest_hidden and record_headline(entry):
             logger.debug('Recorded headline for the daily digest | id=%s | feed="%s"', entry_id, feed_title)
+    elif category_title(entry) in config.ai_news_excerpt_categories:
+        if record_excerpt(entry):
+            logger.debug('Recorded excerpt for the daily digest | id=%s | feed="%s"', entry_id, feed_title)
 
     for agent_name, agent_config in config.agents.items():
         if not filter_entry(config, (agent_name, agent_config), entry):
